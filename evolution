@@ -1,0 +1,301 @@
+#!/usr/bin/python3
+"""
+Implementation of evolutionary algorithms.
+"""
+import sys
+from io import StringIO
+
+import importlib
+import inspect
+import traceback
+import re
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+
+import algorithms
+
+
+def usage():
+    traceback.print_exc()
+    print(
+        "Usage: %s --population <dimension> <count> [<min> <max>]" % sys.argv[0], file=sys.stderr)
+    print("       %s --run <fitness_script> <population> <algorithm> [<param1> [<param2> [...]]]" %
+          sys.argv[0], file=sys.stderr)
+    print("       %s --plot <fitness_script> <population> [<min> <max>]" %
+          sys.argv[0], file=sys.stderr)
+    print("       %s --animate <fitness_script> <population> [<min> <max>]" %
+          sys.argv[0], file=sys.stderr)
+
+
+def main():
+    try:
+        # determine what to do
+        what = sys.argv[1]
+    except IndexError:
+
+        usage()
+        sys.exit(1)
+
+    # generate population
+    if what == '--population':
+        # load arguments
+        try:
+            dimension = int(sys.argv[2])
+            count = int(sys.argv[3])
+        except:
+            usage()
+            sys.exit(1)
+        try:
+            min_value = float(sys.argv[4])
+            max_value = float(sys.argv[5])
+        except:
+            min_value = -10.0
+            max_value = 10.0
+        print('Generating population (%d, dim %d)' %
+              (count, dimension), file=sys.stderr)
+        print('  limits <%.2f; %.2f>' %
+              (min_value, max_value), file=sys.stderr)
+        population = np.random.random(
+            (count, dimension)) * (max_value - min_value) + min_value
+        # print(population)
+        s = StringIO()
+        np.savetxt(s, population, delimiter=';')
+        print(s.getvalue())
+
+    # run evolution
+    elif what == '--run':
+        try:
+            fitness_file = sys.argv[2]
+            population = np.genfromtxt(sys.argv[3], delimiter=';')
+            if population.ndim == 1:
+                population = population.reshape(-1, 1)
+            print(population, file=sys.stderr)
+            algorithm_name = sys.argv[4]
+            params = dict(tuple(p.split('=')) for p in sys.argv[5:])
+        except:
+            usage()
+            sys.exit(1)
+
+        known_algorithms = dict((name.lower(), obj) for name, obj in inspect.getmembers(
+            algorithms, predicate=inspect.isclass))
+        try:
+            algorithm = known_algorithms[algorithm_name.lower()](**params)
+            fitness = getattr(importlib.import_module(
+                fitness_file.replace('/', '.').rstrip('.py')), "fitness")
+        except Exception as e:
+            traceback.print_exc()
+            #print('Exception:', e, file=sys.stderr)
+        else:
+            # determine evolution termination condition
+            epoch_counter = 0
+            conditions = []
+            try:
+                epoch_count = algorithm.params.get('epoch_count').value
+                conditions.append(
+                    lambda counter, best_fitness: counter >= epoch_count)
+            except:
+                pass
+            try:
+                desired_fitness = algorithm.params.get('desired_fitness').value
+                if desired_fitness is None:
+                    raise TypeError
+                conditions.append(
+                    lambda counter, best_fitness: best_fitness <= desired_fitness)
+            except:
+                pass
+
+            # if not conditions:
+            #    print('No condition defined, running 50 epochs.', file=sys.stderr)
+            #    conditions.append(
+            #        lambda counter, best_fitness: counter >= 50)
+
+            # run the evolution
+            print("Running %s" % (algorithm), file=sys.stderr)
+            while True:
+                # get fitness values
+                fitness_values = fitness(population.T)
+                fitness_values = fitness(population)
+                best_fitness = min(fitness_values)
+                print('best fitness:   ', best_fitness, file=sys.stderr)
+                print('best individual:', population[np.where(
+                    fitness_values == best_fitness)[0]], file=sys.stderr)
+                # check whether a condition is satisfied
+                if any(c(epoch_counter, best_fitness) for c in conditions):
+                    print("Condition satisfied.", file=sys.stderr)
+                    break
+                # run next generation
+                epoch_counter += 1
+                print('Epoch %d' % epoch_counter, file=sys.stderr)
+                population = algorithm.epoch(population, fitness)
+                # print epoch info
+                s = StringIO()
+                np.savetxt(s, population, delimiter=';')
+                print('### Epoch %d ###' % epoch_counter)
+                print(s.getvalue())
+
+    elif what == '--animate':
+        # load arguments
+        plot_type = '3d'
+        try:
+            fitness_file = sys.argv[2]
+            fitness = getattr(importlib.import_module(
+                fitness_file.replace('/', '.').rstrip('.py')), "fitness")
+            # load all generations
+            generations = []
+            with open(sys.argv[3], 'r') as f:
+                data = re.split(r'### Epoch [0-9]+ ###', f.read())
+            for epoch in filter(None, data):
+                s = StringIO(epoch)
+                population = np.genfromtxt(s, delimiter=';')
+                if population.ndim == 1:
+                    plot_type = '2d'
+                    population = population.reshape(-1, 1)
+                    # print(population, file=sys.stderr)
+                generations.append(population)
+            print(len(generations), file=sys.stderr)
+        except:
+            usage()
+            sys.exit(1)
+        try:
+            min_value = float(sys.argv[4])
+            max_value = float(sys.argv[5])
+        except:
+            min_value = -10.0
+            max_value = 10.0
+
+        # animate
+        if plot_type == '2d':
+            fig, ax = plt.subplots()
+            # line, = plt.plot(generations[0], fitness(
+            #    generations[0].T), marker='o', c='r')
+            line, = plt.plot([], [], 'ko')
+            plt.style.use('grayscale')
+            line = plt.scatter([], [], cmap='gray', edgecolors='k')
+
+            def init():
+                x = np.linspace(min_value, max_value, 500)
+                ax.plot(x, fitness(x.reshape(-1, 1).T),
+                        color='green', alpha=0.5)
+                ax.set_xlabel('x0')
+                ax.set_ylabel('fitness')
+                return line,
+
+            def update(frame):
+                frame = int(frame)
+                fitness_values = fitness(generations[frame].T)
+                stacked = np.vstack((generations[frame].T, fitness_values)).T
+                line.set_offsets(stacked)
+                line.set_array(np.linspace(0, 1, len(generations[frame])))
+
+                return line,
+            ani = FuncAnimation(fig, update, frames=range(len(
+                generations)), interval=250, init_func=init, blit=True)
+            plt.show()
+
+        elif plot_type == '3d':
+            fig = plt.figure()
+            ax = Axes3D(fig)
+
+            # plot surface
+            x_fitness = np.linspace(min_value, max_value, 20)
+            y_fitness = np.linspace(min_value, max_value, 20)
+            X, Y = np.meshgrid(x_fitness, y_fitness)
+            pairs = np.array([X, Y]).T.reshape(X.shape[0], X.shape[1], 2)
+            Z = fitness(pairs.T)
+            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.5)
+
+            def gen(n):
+                pass
+                #phi = 0
+                # while phi < 2*np.pi:
+                #    yield np.array([np.cos(phi), np.sin(phi), phi])
+                #    phi += 2*np.pi/n
+
+            def update(frame, data, line):
+                frame = int(frame)
+                #fitness_values = fitness(generations[frame].T)
+                #stacked = np.vstack((generations[frame].T, fitness_values)).T
+                generation = generations[frame].T
+                line.set_data(generation)
+                line.set_3d_properties(fitness(generation))
+
+            #data = np.array(list(gen(N))).T
+            fitness_values = fitness(generations[0].T)
+            stacked = np.vstack((generations[0].T, fitness_values)).T
+            line, = ax.plot(stacked[0, 0:1], stacked[1,
+                                                     0:1], stacked[2, 0:1], 'ko')
+
+            ax.set_xlabel('x0')
+            ax.set_ylabel('x1')
+            ax.set_zlabel('fitness')
+
+            ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
+                data, line), interval=250, blit=False)
+            #ani.save('matplot003.gif', writer='imagemagick')
+            plt.show()
+
+    elif what == '--plot':
+        # load arguments
+        plot_type = '3d'
+        try:
+            fitness_file = sys.argv[2]
+            fitness = getattr(importlib.import_module(
+                fitness_file.replace('/', '.').rstrip('.py')), "fitness")
+            # load last generation
+            with open(sys.argv[3], 'r') as f:
+                s = StringIO(f.read().split('###')[-1])
+            population = np.genfromtxt(s, delimiter=';')
+            if population.ndim == 1:
+                plot_type = '2d'
+                population = population.reshape(-1, 1)
+            print(population, file=sys.stderr)
+        except:
+            usage()
+            sys.exit(1)
+        try:
+            min_value = float(sys.argv[4])
+            max_value = float(sys.argv[5])
+        except:
+            min_value = -10.0
+            max_value = 10.0
+
+        # create plot
+        fig = plt.figure()
+        if plot_type == '2d':
+            fitness_values = fitness(population.T)
+            ax = fig.add_subplot(111)
+            x = np.linspace(min_value, max_value, 500)
+            surface = fitness(x.reshape(-1, 1).T)
+            ax.plot(x, surface, color='green', alpha=0.5)
+            ax.scatter(population, fitness_values, color='black')
+            ax.set_xlabel('x0')
+            ax.set_ylabel('fitness')
+        elif plot_type == '3d':
+            fitness_values = fitness(population.T)
+            ax = fig.add_subplot(111, projection='3d')
+            x_fitness = np.linspace(min_value, max_value, 20)
+            y_fitness = np.linspace(min_value, max_value, 20)
+            X, Y = np.meshgrid(x_fitness, y_fitness)
+            pairs = np.array([X, Y]).T.reshape(X.shape[0], X.shape[1], 2)
+            Z = fitness(pairs.T)
+            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.5)
+
+            ax.scatter(population[:, 0], population[:, 1],
+                       fitness_values, color='black', )
+            ax.set_xlabel('x0')
+            ax.set_ylabel('x1')
+            ax.set_zlabel('fitness')
+        else:
+            # TODO colorbar for 4d...
+            print("Cannot visualize above 3D.", file=sys.stderr)
+            sys.exit(1)
+        plt.show()
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except SystemExit:
+        pass
