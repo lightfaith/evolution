@@ -27,6 +27,9 @@ def usage(known_algorithms=None):
           sys.argv[0], file=sys.stderr)
     print("       %s --animate <fitness_script> <population> [<min> <max>]" %
           sys.argv[0], file=sys.stderr)
+    print("       %s --progress <fitness_script> <population>" %
+          sys.argv[0], file=sys.stderr)
+
     if known_algorithms:
         print('\nSupported algorithms:', file=sys.stderr)
         for algo in known_algorithms.keys():
@@ -137,6 +140,37 @@ def main():
                 np.savetxt(s, population, delimiter=';')
                 print('### Epoch %d ###' % epoch_counter)
                 print(s.getvalue())
+
+    elif what == '--progress':
+        # load arguments
+        try:
+            fitness_file = sys.argv[2]
+            fitness = getattr(importlib.import_module(
+                fitness_file.replace('/', '.').rstrip('.py')), "fitness")
+            # load all generations
+            generations = []
+            with open(sys.argv[3], 'r') as f:
+                data = re.split(r'### Epoch [0-9]+ ###', f.read())
+            for epoch in filter(None, data):
+                s = StringIO(epoch)
+                population = np.genfromtxt(s, delimiter=';')
+                if population.ndim == 1:
+                    population = population.reshape(-1, 1)
+                generations.append(population)
+            print(len(generations), file=sys.stderr)
+        except:
+            usage(known_algorithms=known_algorithms)
+            sys.exit(1)
+
+        generations = np.array(generations)
+        print('gene shape:', generations.shape, file=sys.stderr)
+        fitness_values = [fitness(g.T) for g in generations]
+        print(fitness_values[:2])
+        fig, ax = plt.subplots()
+        ax.plot(fitness_values)
+        ax.set_xlabel('epoch')
+        ax.set_ylabel('fitness')
+        plt.show()
 
     elif what == '--animate':
         # load arguments

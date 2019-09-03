@@ -28,12 +28,16 @@ class Algorithm:
     Evolution runs until any condition is met:
         1. Epoch count exceedes the limit (epoch_count).
         2. Good-enough solution has been found (desired_fitness).
+
+    Parameters common to all algorithms:
+        elitism - whether best known solution should be preserved
     """
 
     def __init__(self):
         self.params = {
             'epoch_count': Parameter(1000, int),
             'desired_fitness': Parameter(None, float),
+            'elitism': Parameter(True, bool),
         }
 
     def update_params(self, params):
@@ -74,6 +78,7 @@ class HillClimbing(Algorithm):
     def epoch(self, population, fitness):
         spawn_range = self.params['spawn_range'].value
         spawn_count = self.params['spawn_count'].value
+        elitism = self.params['elitism'].value
 
         result = np.empty((0, population.shape[1]))
         # for each individual:
@@ -81,7 +86,8 @@ class HillClimbing(Algorithm):
             # generate spawn_count close individuals
             changes = np.random.random(
                 (spawn_count, population.shape[1])) * 2 * spawn_range - spawn_range + individual
-            changes = np.vstack((changes, individual))
+            if elitism:
+                changes = np.vstack((changes, individual))
             # use the best one
             fitness_values = fitness(changes.T)
             best_index = np.where(fitness_values == np.amin(fitness_values))[0]
@@ -119,17 +125,29 @@ class Annealing(Algorithm):
         distance = self.params['distance'].value
         temperature = self.params['temperature'].value
         cooling = self.params['cooling'].value
+        elitism = self.params['elitism'].value
 
-        differences = np.random.random(
-            population.shape) * (2*distance) - distance
-        new = population + differences
         fitness_population = fitness(population.T)
+        differences = np.random.random(
+            population.shape) * (2 * distance) - distance
+
+        if elitism:
+            # replace worst old with best old
+            # set no difference for it
+            best_old = np.where(fitness_population ==
+                                np.amin(fitness_population))[0][0]
+            worst_old = np.where(fitness_population ==
+                                 np.amax(fitness_population))[0][0]
+            population[worst_old] = population[best_old]
+            differences[worst_old] = np.zeros(differences.shape[1])
+
+        new = population + differences
         fitness_new = fitness(new.T)
+
         # use better
         new_better = (fitness_new < fitness_population).reshape(-1, 1)
         population = np.where(new_better, new, population)
         # use worse if lucky enough
-
         badluck = np.random.rand()
 
         def acceptance(old, new):
@@ -144,7 +162,8 @@ class Annealing(Algorithm):
 
 class TabuSearch(Algorithm):
     """
-
+    Tabu Search works like HillClimbing, but last steps are remembered.
+    This helps avoiding running in cycles.
     """
     pass
 
@@ -174,7 +193,19 @@ class Genetic(Algorithm):
     """
     Genetic Algorithm
     """
-    pass
+
+    def __init__(self, **user_params):
+        super().__init__()
+        default_params = {
+            # crossover mask
+            'mask': Parameter(0x0000ffff, int),
+            # chance of mutation
+            'mutation_chance': Parameter(0.01, float),
+            # number of bits to mutate
+            'mutation_strength': Parameter(2, int),
+        }
+        self.update_params(default_params)
+        self.update_params(user_params)
 
 
 class Immunology(Algorithm):
