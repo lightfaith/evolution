@@ -105,5 +105,5 @@ venv.bak/
 
 .*.swp
 old/
-
+.vscode/
 
