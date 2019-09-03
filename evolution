@@ -77,7 +77,9 @@ def main():
     elif what == '--run':
         try:
             fitness_file = sys.argv[2]
-            population = np.genfromtxt(sys.argv[3], delimiter=';')
+            with open(sys.argv[3], 'r') as f:
+                s = StringIO(f.read().split('###')[-1])
+            population = np.genfromtxt(s, delimiter=';', dtype=np.float64)
             if population.ndim == 1:
                 population = population.reshape(-1, 1)
             print(population, file=sys.stderr)

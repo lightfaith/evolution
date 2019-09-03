@@ -24,7 +24,7 @@ class Parameter:
 
 class Algorithm:
     """
-    In every epoch, an algorithm modifies given population. 
+    In every epoch, an algorithm modifies given population.
     Evolution runs until any condition is met:
         1. Epoch count exceedes the limit (epoch_count).
         2. Good-enough solution has been found (desired_fitness).
@@ -56,7 +56,7 @@ class Algorithm:
 
 class HillClimbing(Algorithm):
     """
-    In Hill Climbing algorithm every individual generate a number of 
+    In Hill Climbing algorithm every individual generate a number of
     individuals close to it. The best offspring is used.
 
     Parameters:
@@ -198,14 +198,68 @@ class Genetic(Algorithm):
         super().__init__()
         default_params = {
             # crossover mask
-            'mask': Parameter(0x0000ffff, int),
+            'mask': Parameter(0x00000000ffffffff, int),
             # chance of mutation
             'mutation_chance': Parameter(0.01, float),
             # number of bits to mutate
+            # or range of change
             'mutation_strength': Parameter(2, int),
         }
         self.update_params(default_params)
         self.update_params(user_params)
+
+    def epoch(self, population, fitness):
+        parent_count = 2
+        mask = np.uint64(self.params['mask'].value)
+        mutation_chance = self.params['mutation_chance'].value
+        mutation_strength = self.params['mutation_strength'].value
+        elitism = self.params['elitism'].value
+
+        fitness_values = fitness(population.T)
+        min_fitness = np.amin(fitness_values)
+        max_fitness = np.amax(fitness_values)
+        normalized = (fitness_values - min_fitness) / \
+            (max_fitness - min_fitness)
+
+        new = np.empty((0, population.shape[1]), dtype=np.float64)
+        if elitism:
+            new = np.vstack((new, population))
+
+        for _ in range(len(population) // parent_count):
+            # pick 2 parents
+            parent_indices = set()
+            while len(parent_indices) < parent_count:
+                r = np.random.random()
+                available = normalized[normalized > r]
+                parent_index = np.where(normalized == np.amin(
+                    available))[0][0]
+                parent_indices.add(parent_index)
+            # get parents as binary
+            binary = population[list(parent_indices)].view(np.uint64)
+            # get offsprings
+            negmask = np.bitwise_xor(mask, np.uint64(0xffffffffffffffff))
+            offsprings = np.array(
+                [np.bitwise_and(binary[0], mask) + np.bitwise_and(binary[1], negmask),
+                 np.bitwise_and(binary[1], mask) + np.bitwise_and(binary[0], negmask)]).view(np.float64)
+            # mutate
+            r = np.random.random(offsprings.shape) > mutation_chance
+            """
+            # mutation is done by adding a small number
+            # bit flipping is not used, cause it gives crazy numbers
+            
+            mutations = np.fromfunction(
+                np.vectorize(
+                    lambda i, j: sum(1 << x for x in np.random.randint(1, 63, mutation_strength))), offsprings.shape).astype(np.uint64)
+            offsprings ^= mutations
+            """
+            mutations = np.random.random(
+                offsprings.shape) * mutation_strength - (mutation_strength/2)
+            offsprings += np.where(r, mutations, 0)
+            new = np.vstack((new, offsprings.astype(np.float64)))
+
+        fitness_values = fitness(new.T)
+        result = new[fitness_values.argsort()][: population.shape[0]]
+        return result
 
 
 class Immunology(Algorithm):
