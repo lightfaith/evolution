@@ -140,3 +140,73 @@ class Annealing(Algorithm):
         # cooldown
         self.params['temperature'].set(temperature * cooling)
         return population
+
+
+class TabuSearch(Algorithm):
+    """
+
+    """
+    pass
+
+
+class SOMA(Algorithm):
+    """
+    Self-Organizing Migrating Algorithm
+    """
+    pass
+
+
+class ES(Algorithm):
+    """
+    Evolutionary Strategy
+    """
+    pass
+
+
+class AntColony(Algorithm):
+    """
+    Ant Colony Optimization
+    """
+    pass
+
+
+class Genetic(Algorithm):
+    """
+    Genetic Algorithm
+    """
+    pass
+
+
+class Immunology(Algorithm):
+    """
+    Immunology System Method
+    """
+    pass
+
+
+class Memetic(Algorithm):
+    """
+    Memetic Algorithms
+    """
+    pass
+
+
+class ScatterSearch(Algorithm):
+    """
+    Scatter Search
+    """
+    pass
+
+
+class ParticleSwarm(Algorithm):
+    """
+    Particle Swarm
+    """
+    pass
+
+
+class Differential(Algorithm):
+    """
+    Differential Evolution
+    """
+    pass

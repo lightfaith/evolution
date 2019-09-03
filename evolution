@@ -193,7 +193,7 @@ def main():
                 line.set_array(np.linspace(0, 1, len(generations[frame])))
                 return (line,)
 
-            FuncAnimation(fig, update, frames=range(len(
+            ani = FuncAnimation(fig, update, frames=range(len(
                 generations)), interval=150, init_func=init, blit=True)
             plt.show()
 
@@ -224,7 +224,7 @@ def main():
             ax.set_ylabel('x1')
             ax.set_zlabel('fitness')
 
-            FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
+            ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
                 data, line), interval=150, blit=False)
             plt.show()
 
