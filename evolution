@@ -17,7 +17,7 @@ from matplotlib.animation import FuncAnimation
 import algorithms
 
 
-def usage():
+def usage(known_algorithms=None):
     traceback.print_exc()
     print(
         "Usage: %s --population <dimension> <count> [<min> <max>]" % sys.argv[0], file=sys.stderr)
@@ -27,17 +27,23 @@ def usage():
           sys.argv[0], file=sys.stderr)
     print("       %s --animate <fitness_script> <population> [<min> <max>]" %
           sys.argv[0], file=sys.stderr)
+    if known_algorithms:
+        print('\nSupported algorithms:', file=sys.stderr)
+        for algo in known_algorithms.keys():
+            print('   ', algo)
 
 
 def main():
+    known_algorithms = dict((name.lower(), obj) for name, obj in inspect.getmembers(
+        algorithms, predicate=inspect.isclass) if issubclass(obj, algorithms.Algorithm) and name != 'Algorithm')
     try:
         # determine what to do
         what = sys.argv[1]
     except IndexError:
-
-        usage()
+        usage(known_algorithms=known_algorithms)
         sys.exit(1)
 
+    np.random.seed()
     # generate population
     if what == '--population':
         # load arguments
@@ -45,7 +51,7 @@ def main():
             dimension = int(sys.argv[2])
             count = int(sys.argv[3])
         except:
-            usage()
+            usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
             min_value = float(sys.argv[4])
@@ -75,16 +81,14 @@ def main():
             algorithm_name = sys.argv[4]
             params = dict(tuple(p.split('=')) for p in sys.argv[5:])
         except:
-            usage()
+            usage(known_algorithms=known_algorithms)
             sys.exit(1)
 
-        known_algorithms = dict((name.lower(), obj) for name, obj in inspect.getmembers(
-            algorithms, predicate=inspect.isclass))
         try:
             algorithm = known_algorithms[algorithm_name.lower()](**params)
             fitness = getattr(importlib.import_module(
                 fitness_file.replace('/', '.').rstrip('.py')), "fitness")
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             #print('Exception:', e, file=sys.stderr)
         else:
@@ -116,7 +120,6 @@ def main():
             while True:
                 # get fitness values
                 fitness_values = fitness(population.T)
-                fitness_values = fitness(population)
                 best_fitness = min(fitness_values)
                 print('best fitness:   ', best_fitness, file=sys.stderr)
                 print('best individual:', population[np.where(
@@ -156,7 +159,7 @@ def main():
                 generations.append(population)
             print(len(generations), file=sys.stderr)
         except:
-            usage()
+            usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
             min_value = float(sys.argv[4])
@@ -180,7 +183,7 @@ def main():
                         color='green', alpha=0.5)
                 ax.set_xlabel('x0')
                 ax.set_ylabel('fitness')
-                return line,
+                return (line, )
 
             def update(frame):
                 frame = int(frame)
@@ -188,10 +191,10 @@ def main():
                 stacked = np.vstack((generations[frame].T, fitness_values)).T
                 line.set_offsets(stacked)
                 line.set_array(np.linspace(0, 1, len(generations[frame])))
+                return (line,)
 
-                return line,
-            ani = FuncAnimation(fig, update, frames=range(len(
-                generations)), interval=250, init_func=init, blit=True)
+            FuncAnimation(fig, update, frames=range(len(
+                generations)), interval=150, init_func=init, blit=True)
             plt.show()
 
         elif plot_type == '3d':
@@ -201,27 +204,17 @@ def main():
             # plot surface
             x_fitness = np.linspace(min_value, max_value, 20)
             y_fitness = np.linspace(min_value, max_value, 20)
-            X, Y = np.meshgrid(x_fitness, y_fitness)
-            pairs = np.array([X, Y]).T.reshape(X.shape[0], X.shape[1], 2)
-            Z = fitness(pairs.T)
-            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.5)
+            xx, yy = np.meshgrid(x_fitness, y_fitness)
+            pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
+            zz = fitness(pairs.T)
+            ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.5)
 
-            def gen(n):
-                pass
-                #phi = 0
-                # while phi < 2*np.pi:
-                #    yield np.array([np.cos(phi), np.sin(phi), phi])
-                #    phi += 2*np.pi/n
-
-            def update(frame, data, line):
+            def update(frame, _, line):
                 frame = int(frame)
-                #fitness_values = fitness(generations[frame].T)
-                #stacked = np.vstack((generations[frame].T, fitness_values)).T
                 generation = generations[frame].T
                 line.set_data(generation)
                 line.set_3d_properties(fitness(generation))
 
-            #data = np.array(list(gen(N))).T
             fitness_values = fitness(generations[0].T)
             stacked = np.vstack((generations[0].T, fitness_values)).T
             line, = ax.plot(stacked[0, 0:1], stacked[1,
@@ -231,9 +224,8 @@ def main():
             ax.set_ylabel('x1')
             ax.set_zlabel('fitness')
 
-            ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
-                data, line), interval=250, blit=False)
-            #ani.save('matplot003.gif', writer='imagemagick')
+            FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
+                data, line), interval=150, blit=False)
             plt.show()
 
     elif what == '--plot':
@@ -252,7 +244,7 @@ def main():
                 population = population.reshape(-1, 1)
             print(population, file=sys.stderr)
         except:
-            usage()
+            usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
             min_value = float(sys.argv[4])
@@ -277,10 +269,10 @@ def main():
             ax = fig.add_subplot(111, projection='3d')
             x_fitness = np.linspace(min_value, max_value, 20)
             y_fitness = np.linspace(min_value, max_value, 20)
-            X, Y = np.meshgrid(x_fitness, y_fitness)
-            pairs = np.array([X, Y]).T.reshape(X.shape[0], X.shape[1], 2)
-            Z = fitness(pairs.T)
-            ax.plot_surface(X, Y, Z, cmap='viridis', alpha=0.5)
+            xx, yy = np.meshgrid(x_fitness, y_fitness)
+            pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
+            zz = fitness(pairs.T)
+            ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.5)
 
             ax.scatter(population[:, 0], population[:, 1],
                        fitness_values, color='black', )

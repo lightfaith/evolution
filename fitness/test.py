@@ -7,9 +7,9 @@ import numpy as np
 
 def fitness(x):
     # return sum(abs(x))
-    # return sum(x ** 2) # 1st deJong
-    # return sum(np.cos((x) * 0.5))
-    return sum(np.sin((x) * 0.5))
+    return sum(x ** 2)  # 1st deJong
+    return sum(np.cos((x) * 0.5))
+    return sum(2*np.sin(x) - (np.cos(x[0]**2) * (0.05 * np.ndim(x)) * x + abs(x[-1])))
 
     # Himmelblau 3D
     # optimas: 3, 2

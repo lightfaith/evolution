@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-import sys
-import numpy as np
 """
 Evolutionary algorithms are implemented here.
 """
+import sys
+import numpy as np
 
 
 class Parameter:
@@ -23,14 +23,18 @@ class Parameter:
 
 
 class Algorithm:
+    """
+    In every epoch, an algorithm modifies given population. 
+    Evolution runs until any condition is met:
+        1. Epoch count exceedes the limit (epoch_count).
+        2. Good-enough solution has been found (desired_fitness).
+    """
+
     def __init__(self):
         self.params = {
             'epoch_count': Parameter(1000, int),
             'desired_fitness': Parameter(None, float),
         }
-
-    def epoch(self, population, fitness):
-        print("Abstract algorithm cannot run!")
 
     def update_params(self, params):
         for k, v in params.items():
@@ -47,6 +51,15 @@ class Algorithm:
 
 
 class HillClimbing(Algorithm):
+    """
+    In Hill Climbing algorithm every individual generate a number of 
+    individuals close to it. The best offspring is used.
+
+    Parameters:
+        spawn_range (float) - maximum distance between old and new individual
+        spawn_count (int) - number of offsprings
+    """
+
     def __init__(self, **user_params):
         super().__init__()
         default_params = {
@@ -74,3 +87,56 @@ class HillClimbing(Algorithm):
             best_index = np.where(fitness_values == np.amin(fitness_values))[0]
             result = np.vstack((result, changes[best_index]))
         return result
+
+
+class Annealing(Algorithm):
+    """
+    Simulated Annealing algorithm slightly alter every individual
+    in a manner similar to HillClimbing. Better result is always accepted,
+    worse result is randomly accepted (the chance drops every epoch).
+    That means at the beginning local extremes can be overcame.
+
+    Parameters:
+        distance (float) - maximum distance between old and new individual
+        temperature (float) - system temperature, drops over time
+        cooling (float) - determines speed of temperature dropping
+    """
+
+    def __init__(self, **user_params):
+        super().__init__()
+        default_params = {
+            # visible distance
+            'distance': Parameter(1.0, float),
+            # initial acceptance threshold
+            'temperature': Parameter(1, float),
+            # cooling multiplier
+            'cooling': Parameter(0.95, float),
+        }
+        self.update_params(default_params)
+        self.update_params(user_params)
+
+    def epoch(self, population, fitness):
+        distance = self.params['distance'].value
+        temperature = self.params['temperature'].value
+        cooling = self.params['cooling'].value
+
+        differences = np.random.random(
+            population.shape) * (2*distance) - distance
+        new = population + differences
+        fitness_population = fitness(population.T)
+        fitness_new = fitness(new.T)
+        # use better
+        new_better = (fitness_new < fitness_population).reshape(-1, 1)
+        population = np.where(new_better, new, population)
+        # use worse if lucky enough
+
+        badluck = np.random.rand()
+
+        def acceptance(old, new):
+            return np.exp((fitness(old.T) - fitness(new.T)) / temperature) > badluck
+        accepted = acceptance(population, new).reshape(-1, 1)
+        lucky = np.logical_and(np.logical_not(new_better), accepted)
+        population = np.where(lucky, new, population)
+        # cooldown
+        self.params['temperature'].set(temperature * cooling)
+        return population
