@@ -161,7 +161,7 @@ def main():
                 if population.ndim == 1:
                     population = population.reshape(-1, 1)
                 generations.append(population)
-            print(len(generations), file=sys.stderr)
+            #print(len(generations), file=sys.stderr)
         except:
             usage(known_algorithms=known_algorithms)
             sys.exit(1)
@@ -169,7 +169,6 @@ def main():
         generations = np.array(generations)
         print('gene shape:', generations.shape, file=sys.stderr)
         fitness_values = [fitness(g.T) for g in generations]
-        print(fitness_values[:2])
         fig, ax = plt.subplots()
         ax.plot(fitness_values)
         ax.set_xlabel('epoch')
@@ -195,7 +194,7 @@ def main():
                     population = population.reshape(-1, 1)
                     # print(population, file=sys.stderr)
                 generations.append(population)
-            print(len(generations), file=sys.stderr)
+            #print(len(generations), file=sys.stderr)
         except:
             usage(known_algorithms=known_algorithms)
             sys.exit(1)

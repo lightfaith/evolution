@@ -198,7 +198,7 @@ class Genetic(Algorithm):
         super().__init__()
         default_params = {
             # crossover mask
-            'mask': Parameter(0x00000000ffffffff, int),
+            # 'mask': Parameter(0x00000000ffffffff, int),
             # chance of mutation
             'mutation_chance': Parameter(0.01, float),
             # number of bits to mutate
@@ -210,7 +210,7 @@ class Genetic(Algorithm):
 
     def epoch(self, population, fitness):
         parent_count = 2
-        mask = np.uint64(self.params['mask'].value)
+        #mask = np.uint64(self.params['mask'].value)
         mutation_chance = self.params['mutation_chance'].value
         mutation_strength = self.params['mutation_strength'].value
         elitism = self.params['elitism'].value
@@ -236,8 +236,13 @@ class Genetic(Algorithm):
                 parent_indices.add(parent_index)
             # get parents as binary
             binary = population[list(parent_indices)].view(np.uint64)
-            # get offsprings
+            # generate crossover mask
+            mask = np.zeros(64, dtype=int)
+            mask[np.random.randint(64):] = 1
+            mask = mask.dot(1 << np.arange(mask.size)[::-1]).astype(np.uint64)
             negmask = np.bitwise_xor(mask, np.uint64(0xffffffffffffffff))
+            # get offsprings
+
             offsprings = np.array(
                 [np.bitwise_and(binary[0], mask) + np.bitwise_and(binary[1], negmask),
                  np.bitwise_and(binary[1], mask) + np.bitwise_and(binary[0], negmask)]).view(np.float64)
