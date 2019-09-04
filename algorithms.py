@@ -204,6 +204,10 @@ class Genetic(Algorithm):
             # number of bits to mutate
             # or range of change
             'mutation_strength': Parameter(2, int),
+            # whether parameters should be swapped instead of
+            # slightly altered on mutation
+            # good for TSP
+            'mutation_swap': Parameter(False, bool),
         }
         self.update_params(default_params)
         self.update_params(user_params)
@@ -213,19 +217,21 @@ class Genetic(Algorithm):
         #mask = np.uint64(self.params['mask'].value)
         mutation_chance = self.params['mutation_chance'].value
         mutation_strength = self.params['mutation_strength'].value
+        mutation_swap = self.params['mutation_swap'].value
         elitism = self.params['elitism'].value
 
         fitness_values = fitness(population.T)
         min_fitness = np.amin(fitness_values)
         max_fitness = np.amax(fitness_values)
-        normalized = (fitness_values - min_fitness) / \
-            (max_fitness - min_fitness)
+        # normalized = (fitness_values - min_fitness) / \
+        #    (max_fitness - min_fitness)
 
         new = np.empty((0, population.shape[1]), dtype=np.float64)
         if elitism:
             new = np.vstack((new, population))
 
         for _ in range(len(population) // parent_count):
+            """
             # pick 2 parents
             parent_indices = set()
             while len(parent_indices) < parent_count:
@@ -233,8 +239,17 @@ class Genetic(Algorithm):
                 available = normalized[normalized > r]
                 parent_index = np.where(normalized == np.amin(
                     available))[0][0]
+                if parent_index in parent_indices:
+                    try:
+                        parent_index = np.where(normalized == np.amin(
+                            available))[0][len(parent_indices)]
+                    except:
+                        pass
                 parent_indices.add(parent_index)
             # get parents as binary
+            """
+            parent_indices = (np.random.beta(
+                1, 3, size=parent_count) * population.shape[0]).astype(int)
             binary = population[list(parent_indices)].view(np.uint64)
             # generate crossover mask
             mask = np.zeros(64, dtype=int)
@@ -247,19 +262,25 @@ class Genetic(Algorithm):
                 [np.bitwise_and(binary[0], mask) + np.bitwise_and(binary[1], negmask),
                  np.bitwise_and(binary[1], mask) + np.bitwise_and(binary[0], negmask)]).view(np.float64)
             # mutate
-            r = np.random.random(offsprings.shape) > mutation_chance
-            """
-            # mutation is done by adding a small number
-            # bit flipping is not used, cause it gives crazy numbers
-            
-            mutations = np.fromfunction(
-                np.vectorize(
-                    lambda i, j: sum(1 << x for x in np.random.randint(1, 63, mutation_strength))), offsprings.shape).astype(np.uint64)
-            offsprings ^= mutations
-            """
-            mutations = np.random.random(
-                offsprings.shape) * mutation_strength - (mutation_strength/2)
-            offsprings += np.where(r, mutations, 0)
+            if mutation_swap:
+                # mutate by swapping x parameters
+                to_mutate = np.random.random(
+                    offsprings.shape[0]) < mutation_chance
+            else:
+                # mutate by adding a small number
+                r = np.random.random(offsprings.shape) < mutation_chance
+                """
+                # mutation is done by adding a small number
+                # bit flipping is not used, cause it gives crazy numbers
+                
+                mutations = np.fromfunction(
+                    np.vectorize(
+                        lambda i, j: sum(1 << x for x in np.random.randint(1, 63, mutation_strength))), offsprings.shape).astype(np.uint64)
+                offsprings ^= mutations
+                """
+                mutations = np.random.random(
+                    offsprings.shape) * mutation_strength - (mutation_strength/2)
+                offsprings += np.where(r, mutations, 0)
             new = np.vstack((new, offsprings.astype(np.float64)))
 
         fitness_values = fitness(new.T)

@@ -129,7 +129,7 @@ def main():
                 fitness_values = fitness(population.T)
                 best_fitness = min(fitness_values)
                 print('best fitness:   ', best_fitness, file=sys.stderr)
-                print('best individual:', population[np.where(
+                print('best individuals:', population[np.where(
                     fitness_values == best_fitness)[0]], file=sys.stderr)
                 # check whether a condition is satisfied
                 if any(c(epoch_counter, best_fitness) for c in conditions):
