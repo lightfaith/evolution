@@ -29,6 +29,8 @@ def usage(known_algorithms=None):
           sys.argv[0], file=sys.stderr)
     print("       %s --progress <fitness_script> <population>" %
           sys.argv[0], file=sys.stderr)
+    print("       %s --result <fitness_script> <population>" %
+          sys.argv[0], file=sys.stderr)
 
     if known_algorithms:
         print('\nSupported algorithms:', file=sys.stderr)
@@ -289,10 +291,11 @@ def main():
             min_value = -10.0
             max_value = 10.0
 
+        fitness_values = fitness(population.T)
         # create plot
         fig = plt.figure()
         if plot_type == '2d':
-            fitness_values = fitness(population.T)
+
             ax = fig.add_subplot(111)
             x = np.linspace(min_value, max_value, 500)
             surface = fitness(x.reshape(-1, 1).T)
@@ -301,7 +304,6 @@ def main():
             ax.set_xlabel('x0')
             ax.set_ylabel('fitness')
         elif plot_type == '3d':
-            fitness_values = fitness(population.T)
             ax = fig.add_subplot(111, projection='3d')
             x_fitness = np.linspace(min_value, max_value, 20)
             y_fitness = np.linspace(min_value, max_value, 20)
@@ -320,6 +322,36 @@ def main():
             print("Cannot visualize above 3D.", file=sys.stderr)
             sys.exit(1)
         plt.show()
+
+    elif what == '--result':
+        # load arguments
+        #plot_type = '3d'
+        try:
+            fitness_file = sys.argv[2]
+            fitness = getattr(importlib.import_module(
+                fitness_file.replace('/', '.').rstrip('.py')), "fitness")
+            # load last generation
+            with open(sys.argv[3], 'r') as f:
+                s = StringIO(f.read().split('###')[-1])
+            population = np.genfromtxt(s, delimiter=';')
+            if population.ndim == 1:
+                #plot_type = '2d'
+                population = population.reshape(-1, 1)
+            print(population, file=sys.stderr)
+        except:
+            usage(known_algorithms=known_algorithms)
+            sys.exit(1)
+
+        fitness_values = fitness(population.T)
+        population = np.append(
+            population, fitness_values.reshape(-1, 1), axis=1)
+        population = population[fitness_values.argsort()]
+        header = ';'.join(['x%d' % x for x in range(
+            population.shape[1] - 1)] + ['fitness'])
+        s = StringIO()
+        np.savetxt(s, population, delimiter=';')
+        print(header)
+        print(s.getvalue())
 
 
 if __name__ == '__main__':
