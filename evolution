@@ -20,12 +20,12 @@ import algorithms
 def usage(known_algorithms=None):
     traceback.print_exc()
     print(
-        "Usage: %s --population <dimension> <count> [<min> <max>]" % sys.argv[0], file=sys.stderr)
+        "Usage: %s --population <dimension> <count> [<min1>,<max1>,<min2>,...]" % sys.argv[0], file=sys.stderr)
     print("       %s --run <fitness_script> <population> <algorithm> [<param1> [<param2> [...]]]" %
           sys.argv[0], file=sys.stderr)
-    print("       %s --plot <fitness_script> <population> [<min> <max>]" %
+    print("       %s --plot <fitness_script> <population> [<min1>,<max1>,<min2>,...]" %
           sys.argv[0], file=sys.stderr)
-    print("       %s --animate <fitness_script> <population> [<min> <max>]" %
+    print("       %s --animate <fitness_script> <population> [<min1>,<max1>,<min2>,...]" %
           sys.argv[0], file=sys.stderr)
     print("       %s --progress <fitness_script> <population>" %
           sys.argv[0], file=sys.stderr)
@@ -59,17 +59,21 @@ def main():
             usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
-            min_value = float(sys.argv[4])
-            max_value = float(sys.argv[5])
+            parsed = np.array(
+                [int(x) for x in sys.argv[4].split(',')]).reshape(-1, 2)
+            limits_min = np.tile(parsed.T[0], (count, 1))
+            limits_max = np.tile(parsed.T[1], (count, 1))
         except:
-            min_value = -10.0
-            max_value = 10.0
+            limits_min = np.tile(-10, (count, dimension))
+            limits_max = np.tile(10, (count, dimension))
         print('Generating population (%d, dim %d)' %
               (count, dimension), file=sys.stderr)
-        print('  limits <%.2f; %.2f>' %
-              (min_value, max_value), file=sys.stderr)
+        print('  minimums %s' % np.array2string(
+            limits_min[0], separator=','), file=sys.stderr)
+        print('  maximums %s' % np.array2string(
+            limits_max[0], separator=','), file=sys.stderr)
         population = np.random.random(
-            (count, dimension)) * (max_value - min_value) + min_value
+            (count, dimension)) * (limits_max - limits_min) + limits_min
         # print(population)
         s = StringIO()
         np.savetxt(s, population, delimiter=';')
@@ -199,11 +203,9 @@ def main():
             usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
-            min_value = float(sys.argv[4])
-            max_value = float(sys.argv[5])
+            limits = [int(x) for x in sys.argv[4].split(',')]
         except:
-            min_value = -10.0
-            max_value = 10.0
+            limits = [-10., 10] * population.shape[1]
 
         # animate
         if plot_type == '2d':
@@ -215,11 +217,15 @@ def main():
             line = plt.scatter([], [], cmap='gray', edgecolors='k')
 
             def init():
-                x = np.linspace(min_value, max_value, 500)
+                x = np.linspace(limits[0], limits[1], 500)
                 ax.plot(x, fitness(x.reshape(-1, 1).T),
-                        color='green', alpha=0.5)
+                        color='green', alpha=0.7)
                 ax.set_xlabel('x0')
                 ax.set_ylabel('fitness')
+                try:
+                    ax.set_xlim(limits[0], limits[1])
+                except:
+                    print('Incorrect limits.', file=sys.stderr)
                 return (line, )
 
             def update(frame):
@@ -239,12 +245,12 @@ def main():
             ax = Axes3D(fig)
 
             # plot surface
-            x_fitness = np.linspace(min_value, max_value, 20)
-            y_fitness = np.linspace(min_value, max_value, 20)
+            x_fitness = np.linspace(limits[0], limits[1], 20)
+            y_fitness = np.linspace(limits[2], limits[3], 20)
             xx, yy = np.meshgrid(x_fitness, y_fitness)
             pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
             zz = fitness(pairs.T)
-            ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.5)
+            ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.7)
 
             def update(frame, _, line):
                 frame = int(frame)
@@ -259,6 +265,11 @@ def main():
 
             ax.set_xlabel('x0')
             ax.set_ylabel('x1')
+            try:
+                ax.set_xlim(limits[0], limits[1])
+                ax.set_ylim(limits[2], limits[3])
+            except:
+                print('Incorrect limits.', file=sys.stderr)
             ax.set_zlabel('fitness')
 
             ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
@@ -284,19 +295,16 @@ def main():
             usage(known_algorithms=known_algorithms)
             sys.exit(1)
         try:
-            min_value = float(sys.argv[4])
-            max_value = float(sys.argv[5])
+            limits = [int(x) for x in sys.argv[4].split(',')]
         except:
-            min_value = -10.0
-            max_value = 10.0
+            limits = [-10., 10] * population.shape[1]
 
         fitness_values = fitness(population.T)
         # create plot
         fig = plt.figure()
         if plot_type == '2d':
-
             ax = fig.add_subplot(111)
-            x = np.linspace(min_value, max_value, 500)
+            x = np.linspace(limits[0], limits[1], 500)
             surface = fitness(x.reshape(-1, 1).T)
             ax.plot(x, surface, color='green', alpha=0.5)
             ax.scatter(population, fitness_values, color='black')
@@ -304,8 +312,8 @@ def main():
             ax.set_ylabel('fitness')
         elif plot_type == '3d':
             ax = fig.add_subplot(111, projection='3d')
-            x_fitness = np.linspace(min_value, max_value, 20)
-            y_fitness = np.linspace(min_value, max_value, 20)
+            x_fitness = np.linspace(limits[0], limits[1], 20)
+            y_fitness = np.linspace(limits[2], limits[3], 20)
             xx, yy = np.meshgrid(x_fitness, y_fitness)
             pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
             zz = fitness(pairs.T)
@@ -345,6 +353,7 @@ def main():
         population = np.append(
             population, fitness_values.reshape(-1, 1), axis=1)
         population = population[fitness_values.argsort()]
+
         header = ';'.join(['x%d' % x for x in range(
             population.shape[1] - 1)] + ['fitness'])
         s = StringIO()

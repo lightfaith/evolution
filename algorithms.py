@@ -31,6 +31,7 @@ class Algorithm:
 
     Parameters common to all algorithms:
         elitism - whether best known solution should be preserved
+        limits - string in form min1,max1,min2,max2,... describing allowed values
     """
 
     def __init__(self):
@@ -38,7 +39,10 @@ class Algorithm:
             'epoch_count': Parameter(1000, int),
             'desired_fitness': Parameter(None, float),
             'elitism': Parameter(True, bool),
+            'limits': Parameter('', str)
         }
+        self.limits_min = None
+        self.limits_max = None
 
     def update_params(self, params):
         for k, v in params.items():
@@ -49,6 +53,43 @@ class Algorithm:
                     self.params[k].set(v)
                 except:
                     self.params[k] = Parameter(v, str)
+
+    def set_limits(self, population):
+        if self.params['limits'].value:
+            # use given limits
+            parsed = np.array(
+                [int(x) for x in self.params['limits'].value.split(',')[:population.shape[1] * 2]]).reshape(-1, 2)
+            # if parsed.size != population.shape[1] * 2:
+            #    print('Limits and population have different shape.', file=sys.stderr)
+            self.limits_min = np.tile(parsed.T[0], (population.shape[0], 1))
+            self.limits_max = np.tile(parsed.T[1], (population.shape[0], 1))
+        else:
+            # use min and max values
+            self.limits_min = np.tile(
+                np.amin(population, axis=0), (population.shape[0], 1))
+            self.limits_max = np.tile(
+                np.amax(population, axis=0), (population.shape[0], 1))
+            # self.limits = np.vstack(
+            #    (np.amin(population, axis=1), np.amax(population, axis=1))).T
+
+    def enforce_limits(self, population, generate_random=True):
+        if self.limits_min is None:
+            self.set_limits(population)
+        if generate_random:
+            # generate random new if underflow/overflow
+            random = np.random.random(population.shape) * \
+                (self.limits_max - self.limits_min) + self.limits_min
+            population = np.where(
+                population < self.limits_min, random, population)
+            population = np.where(
+                population > self.limits_max, random, population)
+        else:
+            # use min/max if underflow/overflow
+            population = np.where(
+                population < self.limits_min, self.limits_min, population)
+            population = np.where(
+                population > self.limits_max, self.limits_max, population)
+        return population
 
     def __str__(self):
         return "%s (%s)" % (self.__class__.__name__, self.params)
@@ -157,7 +198,7 @@ class Annealing(Algorithm):
         population = np.where(lucky, new, population)
         # cooldown
         self.params['temperature'].set(temperature * cooling)
-        return population
+        return self.enforce_limits(population)
 
 
 class TabuSearch(Algorithm):
@@ -266,6 +307,12 @@ class Genetic(Algorithm):
                 # mutate by swapping x parameters
                 to_mutate = np.random.random(
                     offsprings.shape[0]) < mutation_chance
+                for _, offspring_index in np.ndenumerate(np.where(to_mutate)):
+                    a, b = np.random.randint(0, offsprings.shape[1], 2)
+                    tmp = offsprings[offspring_index][a]
+                    offsprings[offspring_index][a] = offsprings[offspring_index][b]
+                    offsprings[offspring_index][b] = tmp
+
             else:
                 # mutate by adding a small number
                 r = np.random.random(offsprings.shape) < mutation_chance
@@ -285,7 +332,7 @@ class Genetic(Algorithm):
 
         fitness_values = fitness(new.T)
         result = new[fitness_values.argsort()][: population.shape[0]]
-        return result
+        return self.enforce_limits(result)
 
 
 class Immunology(Algorithm):
@@ -313,7 +360,17 @@ class ParticleSwarm(Algorithm):
     """
     Particle Swarm
     """
-    pass
+
+    def __init__(self, **user_params):
+        super().__init__()
+        default_params = {
+
+        }
+        self.update_params(default_params)
+        self.update_params(user_params)
+
+    def epoch(self, population, fitness):
+        pass
 
 
 class Differential(Algorithm):
