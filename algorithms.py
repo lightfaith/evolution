@@ -85,10 +85,11 @@ class Algorithm:
                 population > self.limits_max, random, population)
         else:
             # use min/max if underflow/overflow
-            population = np.where(
-                population < self.limits_min, self.limits_min, population)
-            population = np.where(
-                population > self.limits_max, self.limits_max, population)
+            # population = np.where(
+            #    population < self.limits_min, self.limits_min, population)
+            # population = np.where(
+            #    population > self.limits_max, self.limits_max, population)
+            population = np.clip(population, self.limits_min, self.limits_max)
         return population
 
     def __str__(self):
@@ -255,7 +256,7 @@ class Genetic(Algorithm):
 
     def epoch(self, population, fitness):
         parent_count = 2
-        #mask = np.uint64(self.params['mask'].value)
+        # mask = np.uint64(self.params['mask'].value)
         mutation_chance = self.params['mutation_chance'].value
         mutation_strength = self.params['mutation_strength'].value
         mutation_swap = self.params['mutation_swap'].value
@@ -319,7 +320,7 @@ class Genetic(Algorithm):
                 """
                 # mutation is done by adding a small number
                 # bit flipping is not used, cause it gives crazy numbers
-                
+
                 mutations = np.fromfunction(
                     np.vectorize(
                         lambda i, j: sum(1 << x for x in np.random.randint(1, 63, mutation_strength))), offsprings.shape).astype(np.uint64)
@@ -364,13 +365,69 @@ class ParticleSwarm(Algorithm):
     def __init__(self, **user_params):
         super().__init__()
         default_params = {
-
+            'c1': Parameter(2.0, float),
+            'c2': Parameter(2.0, float),
+            'neighborhood': Parameter(0, int),
         }
         self.update_params(default_params)
         self.update_params(user_params)
 
+        self.current_speed = None
+        self.gbests = None  # global best of all time (for group)
+        self.gbests_fitness = None
+        self.pbests = None  # personal bests
+        self.pbests_fitness = None
+
     def epoch(self, population, fitness):
-        pass
+        c1 = self.params['c1'].value
+        c2 = self.params['c2'].value
+        neighborhood = self.params['neighborhood'].value % population.shape[0]
+
+        if self.current_speed is None:
+            # first run; generate speed, use population as pbest
+            self.current_speed = np.random.random(
+                population.shape) * 2 - 1  # TODO param for generation range?
+            self.pbests = np.copy(population)
+        else:
+            # nth run; get pbest
+            fitness_values = fitness(population.T)
+            self.pbests = np.where(fitness_values.reshape(-1, 1) <
+                                   self.pbests_fitness.reshape(-1, 1), self.pbests, population)
+        self.pbests_fitness = fitness(self.pbests.T)
+
+        # gest gbest (from whole population or closest individuals)
+        if neighborhood == 0:  # no neighborhood
+            # find total global best, use tile to get
+            # same shape as neighborhood variant
+            self.gbests_fitness = np.tile(
+                np.amin(self.pbests_fitness), self.pbests.shape[0])
+            self.gbests = np.tile(
+                self.pbests[np.where(self.pbests_fitness == self.gbests_fitness[0])[0]], self.pbests.shape[0]).reshape(self.pbests.shape)
+        else:
+            # with neighborhood
+            # get individual index offset
+            offsets = np.arange(neighborhood, dtype=int) - neighborhood // 2
+            # get neighbors together for each individual
+            neighborships = np.hstack([np.roll(self.pbests, o) for o in offsets]).reshape(
+                population.shape[0], -1, population.shape[1])
+            # get fitness for independent neighborships
+            fitnesses = np.apply_along_axis(fitness, 2, neighborships)
+            # get order of best fitness in neighborship
+            orders = np.where(np.argsort(fitnesses) == 0)[1]
+            # use the order to get real index in pbest
+            orders = (
+                (orders + np.arange(self.pbests.shape[0], dtype=int)) % self.pbests.shape[0]).reshape(-1, 1)
+            # get correct individuals
+            self.gbests = np.take(self.pbests, orders)
+            # compute their fitness
+            self.gbests_fitness = fitness(self.gbests.T)
+
+        # update current speed
+        self.current_speed += c1 * np.random.random() * (self.pbests - population) + \
+            c2 * np.random.random() * (self.gbests - population)
+        # update population
+        population += self.current_speed
+        return population
 
 
 class Differential(Algorithm):
