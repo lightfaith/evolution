@@ -13,6 +13,7 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from matplotlib import cm
 
 import algorithms
 
@@ -191,7 +192,7 @@ def main():
 
     elif what == '--animate':
         # load arguments
-        plot_type = '3d'
+        plot_type = 'unknown'
         try:
             fitness_file = sys.argv[2]
             fitness = getattr(importlib.import_module(
@@ -206,7 +207,10 @@ def main():
                 if population.ndim == 1:
                     plot_type = '2d'
                     population = population.reshape(-1, 1)
-                    # print(population, file=sys.stderr)
+                elif population.shape[1] == 2:
+                    plot_type = '3d'
+                elif population.shape[1] == 3:
+                    plot_type = '4d'
                 generations.append(population)
             #print(len(generations), file=sys.stderr)
         except:
@@ -227,7 +231,8 @@ def main():
             line = plt.scatter([], [], cmap='gray', edgecolors='k')
 
             def init():
-                x = np.linspace(limits[0], limits[1], 500)
+                detail = 500
+                x = np.linspace(limits[0], limits[1], detail)
                 ax.plot(x, fitness(x.reshape(-1, 1).T),
                         color='green', alpha=0.7)
                 ax.set_xlabel('x0')
@@ -255,11 +260,14 @@ def main():
             ax = Axes3D(fig)
 
             # plot surface
-            x_fitness = np.linspace(limits[0], limits[1], 20)
-            y_fitness = np.linspace(limits[2], limits[3], 20)
+            detail = 20
+            x_fitness = np.linspace(limits[0], limits[1], detail)
+            y_fitness = np.linspace(limits[2], limits[3], detail)
             xx, yy = np.meshgrid(x_fitness, y_fitness)
-            pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
-            zz = fitness(pairs.T)
+            coords = np.vstack(map(np.ravel, (xx, yy))).T
+            # pairs = np.array(
+            #    [xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
+            zz = fitness(coords.T).reshape(xx.shape)
             ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.7)
 
             def update(frame, _, line):
@@ -285,10 +293,47 @@ def main():
             ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
                 data, line), interval=150, blit=False)
             plt.show()
+        elif plot_type == '4d':
+            detail = 10
+            fig = plt.figure()
+            ax = Axes3D(fig)
+            x_fitness = np.linspace(limits[0], limits[1], detail)
+            y_fitness = np.linspace(limits[2], limits[3], detail)
+            z_fitness = np.linspace(limits[4], limits[5], detail)
+            xx, yy, zz = np.meshgrid(x_fitness, y_fitness, z_fitness)
+            coords = np.vstack(map(np.ravel, (xx, yy, zz))).T
+            #ww = fitness(pairs.T)
+            #c = np.random.standard_normal(detail**3)
+            fitness_values = fitness(coords.T)
+            ax.scatter(xx, yy, zz,
+                       c=fitness_values, marker='s', s=400, cmap='viridis', alpha=0.1, depthshade=0)
+            ax.scatter(population[:, 0], population[:, 1],
+                       population[:, 2], color='black', depthshade=0)
+            ax.set_xlabel('x0')
+            ax.set_ylabel('x1')
+            ax.set_zlabel('x2')
+
+            def update(frame, _, line):
+                frame = int(frame)
+                generation = generations[frame]
+                line.set_data(generation[:, :2].T)
+                line.set_3d_properties(generation[:, 2].T)
+
+            #fitness_values = fitness(generations[0].T)
+            #stacked = np.vstack((generations[0].T, fitness_values)).T
+            start = generations[0]
+            line, = ax.plot(start[0, 0:1], start[1, 0:1], start[2, 0:1], 'ko')
+            ani = FuncAnimation(fig, update, frames=range(len(generations)), fargs=(
+                data, line), interval=150, blit=False)
+            plt.show()
+
+        else:
+            print("Cannot visualize above 4D.", file=sys.stderr)
+            sys.exit(1)
 
     elif what == '--plot':
+        plot_type = 'unknown'
         # load arguments
-        plot_type = '3d'
         try:
             fitness_file = sys.argv[2]
             fitness = getattr(importlib.import_module(
@@ -300,6 +345,10 @@ def main():
             if population.ndim == 1:
                 plot_type = '2d'
                 population = population.reshape(-1, 1)
+            elif population.shape[1] == 2:
+                plot_type = '3d'
+            elif population.shape[1] == 3:
+                plot_type = '4d'
             print(population, file=sys.stderr)
         except:
             usage(known_algorithms=known_algorithms)
@@ -313,20 +362,23 @@ def main():
         # create plot
         fig = plt.figure()
         if plot_type == '2d':
+            detail = 500
             ax = fig.add_subplot(111)
-            x = np.linspace(limits[0], limits[1], 500)
+            x = np.linspace(limits[0], limits[1], detail)
             surface = fitness(x.reshape(-1, 1).T)
             ax.plot(x, surface, color='green', alpha=0.5)
             ax.scatter(population, fitness_values, color='black')
             ax.set_xlabel('x0')
             ax.set_ylabel('fitness')
         elif plot_type == '3d':
+            detail = 20
             ax = fig.add_subplot(111, projection='3d')
-            x_fitness = np.linspace(limits[0], limits[1], 20)
-            y_fitness = np.linspace(limits[2], limits[3], 20)
+            x_fitness = np.linspace(limits[0], limits[1], detail)
+            y_fitness = np.linspace(limits[2], limits[3], detail)
             xx, yy = np.meshgrid(x_fitness, y_fitness)
-            pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
-            zz = fitness(pairs.T)
+            coords = np.vstack(map(np.ravel, (xx, yy))).T
+            #pairs = np.array([xx, yy]).T.reshape(xx.shape[0], xx.shape[1], 2)
+            zz = fitness(coords.T).reshape(xx.shape)
             ax.plot_surface(xx, yy, zz, cmap='viridis', alpha=0.5)
 
             ax.scatter(population[:, 0], population[:, 1],
@@ -334,9 +386,26 @@ def main():
             ax.set_xlabel('x0')
             ax.set_ylabel('x1')
             ax.set_zlabel('fitness')
+        elif plot_type == '4d':
+            detail = 10
+            ax = fig.add_subplot(111, projection='3d')
+            x_fitness = np.linspace(limits[0], limits[1], detail)
+            y_fitness = np.linspace(limits[2], limits[3], detail)
+            z_fitness = np.linspace(limits[4], limits[5], detail)
+            xx, yy, zz = np.meshgrid(x_fitness, y_fitness, z_fitness)
+            coords = np.vstack(map(np.ravel, (xx, yy, zz))).T
+            #ww = fitness(pairs.T)
+            #c = np.random.standard_normal(detail**3)
+            fitness_values = fitness(coords.T)
+            ax.scatter(xx, yy, zz,
+                       c=fitness_values, marker='s', s=400, cmap='viridis', alpha=0.1, depthshade=0)
+            ax.scatter(population[:, 0], population[:, 1],
+                       population[:, 2], color='black', depthshade=0)
+            ax.set_xlabel('x0')
+            ax.set_ylabel('x1')
+            ax.set_zlabel('x2')
         else:
-            # TODO colorbar for 4d...
-            print("Cannot visualize above 3D.", file=sys.stderr)
+            print("Cannot visualize above 4D.", file=sys.stderr)
             sys.exit(1)
         plt.show()
 

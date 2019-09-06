@@ -7,7 +7,7 @@ import numpy as np
 
 def fitness(x):
     # return sum(abs(x))
-    # return sum(abs(x - np.array([[1], [2]])))
+    return sum(abs(x))
     return sum(x ** 2)  # 1st deJong
     return sum(np.cos((x) * 0.5))
     return sum(2*np.sin(x) - (np.cos(x[0]**2) * (0.05 * np.ndim(x)) * x + abs(x[-1])))
