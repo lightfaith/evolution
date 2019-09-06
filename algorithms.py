@@ -38,6 +38,7 @@ class Algorithm:
         self.params = {
             'epoch_count': Parameter(1000, int),
             'desired_fitness': Parameter(None, float),
+            'desired_diversity': Parameter(None, float),
             'elitism': Parameter(True, bool),
             'limits': Parameter('', str)
         }
@@ -122,6 +123,10 @@ class HillClimbing(Algorithm):
         spawn_count = self.params['spawn_count'].value
         elitism = self.params['elitism'].value
 
+        # set limits if not defined
+        if self.limits_min is None:
+            self.set_limits(population)
+
         result = np.empty((0, population.shape[1]))
         # for each individual:
         for individual in population:
@@ -169,6 +174,10 @@ class Annealing(Algorithm):
         cooling = self.params['cooling'].value
         elitism = self.params['elitism'].value
 
+        # set limits if not defined
+        if self.limits_min is None:
+            self.set_limits(population)
+
         fitness_population = fitness(population.T)
         differences = np.random.random(
             population.shape) * (2 * distance) - distance
@@ -214,7 +223,60 @@ class SOMA(Algorithm):
     """
     Self-Organizing Migrating Algorithm
     """
-    pass
+
+    def __init__(self, **user_params):
+        super().__init__()
+        default_params = {
+            'path_length': Parameter(3, float),
+            'step': Parameter(0.11, float),
+            'prt': Parameter(0.1, float),
+        }
+        self.update_params(default_params)
+        self.update_params(user_params)
+
+    def epoch(self, population, fitness):
+        path_length = self.params['path_length'].value
+        step = self.params['step'].value
+        prt = self.params['prt'].value
+        step_count = int(path_length // step)
+        population_size, dimension = population.shape
+
+        # set limits if not defined
+        if self.limits_min is None:
+            self.set_limits(population)
+
+        # find best
+        fitness_values = fitness(population.T)
+        best = population[fitness_values.argsort()][0]
+        step_coefs = np.tile(np.linspace(
+            0, path_length, step_count).reshape(-1, 1), dimension)
+
+        # get step values for each step for each individual
+        big_shape = (population_size, step_count, dimension)
+        step_coefs_tiled = np.tile(
+            step_coefs, (population_size, 1)).reshape(big_shape)
+
+        step_inc = best - population
+        step_inc_tiled = np.repeat(
+            step_inc, step_count, axis=0).reshape(big_shape)
+        step_values = step_coefs_tiled * step_inc_tiled
+
+        # generate perturbation vector for steps
+        r = np.random.random(big_shape)
+        prt_vector = np.where(r < prt, 1, 0)
+
+        # compute final steps
+        population_tiled = np.repeat(
+            population, step_count, axis=0).reshape(big_shape)
+        steps = population_tiled + step_values * prt_vector
+        # find best step
+        fitnesses = np.apply_along_axis(fitness, 2, steps)
+        #bests = np.amin(fitnesses, axis=1).reshape(-1, 1)
+        bests_indices = np.argmin(fitnesses, axis=1)
+        #new = steps[:, bests_indices]
+        #new = np.take(steps, bests_indices, axis=2)
+        new = steps[[np.arange(population_size, dtype=int), bests_indices]]
+        return self.enforce_limits(new, generate_random=False)
 
 
 class ES(Algorithm):
@@ -261,6 +323,10 @@ class Genetic(Algorithm):
         mutation_strength = self.params['mutation_strength'].value
         mutation_swap = self.params['mutation_swap'].value
         elitism = self.params['elitism'].value
+
+        # set limits if not defined
+        if self.limits_min is None:
+            self.set_limits(population)
 
         fitness_values = fitness(population.T)
         min_fitness = np.amin(fitness_values)
@@ -379,9 +445,14 @@ class ParticleSwarm(Algorithm):
         self.pbests_fitness = None
 
     def epoch(self, population, fitness):
+        # TODO some elitism?
         c1 = self.params['c1'].value
         c2 = self.params['c2'].value
         neighborhood = self.params['neighborhood'].value % population.shape[0]
+
+        # set limits if not defined
+        if self.limits_min is None:
+            self.set_limits(population)
 
         if self.current_speed is None:
             # first run; generate speed, use population as pbest
@@ -427,7 +498,7 @@ class ParticleSwarm(Algorithm):
             c2 * np.random.random() * (self.gbests - population)
         # update population
         population += self.current_speed
-        return population
+        return self.enforce_limits(population)
 
 
 class Differential(Algorithm):

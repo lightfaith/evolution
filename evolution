@@ -109,7 +109,7 @@ def main():
             try:
                 epoch_count = algorithm.params.get('epoch_count').value
                 conditions.append(
-                    lambda counter, best_fitness: counter >= epoch_count)
+                    lambda counter, best_fitness, diversity: counter >= epoch_count)
             except:
                 pass
             try:
@@ -117,7 +117,16 @@ def main():
                 if desired_fitness is None:
                     raise TypeError
                 conditions.append(
-                    lambda counter, best_fitness: best_fitness <= desired_fitness)
+                    lambda counter, best_fitness, diversity: best_fitness <= desired_fitness)
+            except:
+                pass
+            try:
+                desired_diversity = algorithm.params.get(
+                    'desired_diversity').value
+                if desired_diversity is None:
+                    raise TypeError
+                conditions.append(
+                    lambda counter, best_fitness, diversity: diversity <= desired_diversity)
             except:
                 pass
 
@@ -132,16 +141,17 @@ def main():
                 # get fitness values
                 fitness_values = fitness(population.T)
                 best_fitness = min(fitness_values)
-                print('best fitness:   ', best_fitness, file=sys.stderr)
-                print('best individuals:', population[np.where(
-                    fitness_values == best_fitness)[0]], file=sys.stderr)
+                diversity = max(fitness_values) - min(fitness_values)
+                #print('best fitness:   ', best_fitness, file=sys.stderr)
+                # print('best individuals:', population[np.where(
+                #    fitness_values == best_fitness)[0]], file=sys.stderr)
                 # check whether a condition is satisfied
-                if any(c(epoch_counter, best_fitness) for c in conditions):
+                if any(c(epoch_counter, best_fitness, diversity) for c in conditions):
                     print("Condition satisfied.", file=sys.stderr)
                     break
                 # run next generation
                 epoch_counter += 1
-                print('Epoch %d' % epoch_counter, file=sys.stderr)
+                #print('Epoch %d' % epoch_counter, file=sys.stderr)
                 population = algorithm.epoch(population, fitness)
                 # print epoch info
                 s = StringIO()
@@ -171,7 +181,7 @@ def main():
             sys.exit(1)
 
         generations = np.array(generations)
-        print('gene shape:', generations.shape, file=sys.stderr)
+        print('Evolution shape:', generations.shape, file=sys.stderr)
         fitness_values = [fitness(g.T) for g in generations]
         fig, ax = plt.subplots()
         ax.plot(fitness_values)
